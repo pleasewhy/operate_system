@@ -8,7 +8,7 @@ int main(int argc, char *args[])
     if (argc != 2)
     {
         exit(0);
-        fprintf(1, "except 2 arguments, but %d found", argc);
+        fprintf(1, "expect 2 arguments, but %d found", argc);
     }
     int t = atoi(args[1]);
     fprintf(1, "sleeping\n", t);

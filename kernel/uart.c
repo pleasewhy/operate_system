@@ -122,7 +122,7 @@ uartputc_sync(int c)
       ;
   }
 
-  // wait for Transmit Holding Empty to be set in LSR.
+  // wait for Transmit  HoldingEmpty to be set in LSR.
   while((ReadReg(LSR) & LSR_TX_IDLE) == 0)
     ;
   WriteReg(THR, c);
