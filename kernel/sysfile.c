@@ -9,6 +9,7 @@
 #include "defs.h"
 #include "param.h"
 #include "stat.h"
+#include "sysinfo.h"
 #include "spinlock.h"
 #include "proc.h"
 #include "fs.h"
@@ -514,6 +515,27 @@ sys_pipe(void)
     p->ofile[fd1] = 0;
     fileclose(rf);
     fileclose(wf);
+    return -1;
+  }
+  return 0;
+}
+
+uint64 sys_sysinfo(void)
+{
+  struct proc *p;
+  struct sysinfo info;
+  uint64 addr;
+  p = myproc();
+  if (argaddr(0, &addr) < 0)
+  {
+    return -1;
+  }
+  info.nproc = NPROC - get_unused_proc_num();
+  info.freemem = 133169152 - get_all_proc_used_mem();
+
+  // printf("mem:%d,%d\n", info.freemem, info.nproc);
+  if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+  {
     return -1;
   }
   return 0;
