@@ -9,33 +9,39 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define PA2INDEX(pa) ((pa - PA_START) / PGSIZE)
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+int papage[(PHYSTOP - KERNBASE) / PGSIZE];
+uint64 PA_START;
+int cnt = 0;
 
-struct run {
+struct run
+{
   struct run *next;
 };
 
-struct {
+struct
+{
   struct spinlock lock;
   struct run *freelist;
 } kmem;
 
-void
-kinit()
+void kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  freerange(end, (void *)PHYSTOP);
 }
 
-void
-freerange(void *pa_start, void *pa_end)
+void freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  p = (char *)PGROUNDUP((uint64)pa_start);
+  PA_START = (uint64)p;
+  for (; p + PGSIZE <= (char *)pa_end; p += PGSIZE,cnt++)
     kfree(p);
 }
 
@@ -43,22 +49,30 @@ freerange(void *pa_start, void *pa_end)
 // which normally should have been returned by a
 // call to kalloc().  (The exception is when
 // initializing the allocator; see kinit above.)
-void
-kfree(void *pa)
+void kfree(void *pa)
 {
   struct run *r;
 
-  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+  if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  papage[PA2INDEX((uint64)pa)]--;
+  if (papage[PA2INDEX((uint64)pa)] > 0)
+  {
+    return;
+  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
-  r = (struct run*)pa;
+  r = (struct run *)pa;
 
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
+  papage[PA2INDEX((uint64)pa)] = 0;
+  cnt--;
+  // printf("%d\n",cnt);
   release(&kmem.lock);
 }
 
@@ -72,11 +86,32 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if (r){
     kmem.freelist = r->next;
+    cnt++;
+  }
   release(&kmem.lock);
 
-  if(r)
-    memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+  if (r)
+  {
+    memset((char *)r, 5, PGSIZE); // fill with junk
+    papage[PA2INDEX((uint64)r)] = 1;
+  }
+  return (void *)r;
 }
+
+void add_reference_count(uint64 pa)
+{
+  papage[PA2INDEX((uint64)pa)]++;
+}
+
+void sub_reference_count(uint64 pa)
+{
+  papage[PA2INDEX((uint64)pa)]--;
+}
+
+int get_reference_count(uint64 pa)
+{
+  return papage[PA2INDEX((uint64)pa)];
+}
+// 32698
